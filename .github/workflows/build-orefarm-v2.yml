@@ -1,0 +1,54 @@
+name: Build OreFarm (v2)
+on: workflow_dispatch
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Put the newest Ore Farm zip into the project
+        run: |
+          ZIP=$(for z in orefarm*.zip; do echo "$(git log -1 --format=%ct -- "$z") $z"; done | sort -n | tail -n 1 | cut -d' ' -f2-)
+          echo "Using $ZIP"
+          test -f "$ZIP"
+          mkdir -p /tmp/mod
+          unzip -q "$ZIP" -d /tmp/mod
+          SRC=$(find /tmp/mod -type d -path '*/src/main' | head -n 1)
+          test -n "$SRC"
+          rm -rf src/main
+          mkdir -p src
+          cp -r "$SRC" src/main
+          printf '\nmodName = Ore Farm\nmodId = orefarm\nmodGroup = com.example.orefarm\ngenerateGradleTokenClass =\ndisableSpotless = true\ndisableCheckstyle = true\n' >> gradle.properties
+          find src/main -type f | head -n 80
+
+      - name: Install Java 8
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '8'
+
+      - name: Install the Java version the project asks for
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version-file: .java-version
+
+      - name: Build
+        run: |
+          chmod +x gradlew
+          ./gradlew build --stacktrace
+
+      - name: Pick the finished jar
+        run: |
+          mkdir -p out
+          cp build/libs/*.jar out/
+          rm -f out/*-dev.jar out/*-sources.jar
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: orefarm-jar
+          path: out/*.jar
